@@ -14,3 +14,8 @@
 .glide/
 
 example/example
+
+# Vim files
+*.swp
+.vim*
+

@@ -2,19 +2,9 @@ package sctp
 
 import (
 	"net"
-	"os"
 	"sync"
 	"syscall"
 )
-
-//from https://github.com/golang/go
-// Boolean to int.
-func boolint(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
 
 //from https://github.com/golang/go
 func ipToSockaddr(family int, ip net.IP, port int, zone string) (syscall.Sockaddr, error) {
@@ -152,67 +142,4 @@ func (p *ipStackCapabilities) probe() {
 			p.ipv4MappedIPv6Enabled = true
 		}
 	}
-}
-
-//from https://github.com/golang/go
-//Change: we check the first IP address in the list of candidate SCTP IP addresses
-func (a *SCTPAddr) isWildcard() bool {
-	if a == nil {
-		return true
-	}
-	if 0 == len(a.IPAddrs) {
-		return true
-	}
-
-	return a.IPAddrs[0].IP.IsUnspecified()
-}
-
-func (a *SCTPAddr) family() int {
-	if a != nil {
-		for _, ip := range a.IPAddrs {
-			if ip.IP.To4() == nil {
-				return syscall.AF_INET6
-			}
-		}
-	}
-	return syscall.AF_INET
-}
-
-//from https://github.com/golang/go
-func favoriteAddrFamily(network string, laddr *SCTPAddr, raddr *SCTPAddr, mode string) (family int, ipv6only bool) {
-	switch network[len(network)-1] {
-	case '4':
-		return syscall.AF_INET, false
-	case '6':
-		return syscall.AF_INET6, true
-	}
-
-	if mode == "listen" && (laddr == nil || laddr.isWildcard()) {
-		if supportsIPv4map() || !supportsIPv4() {
-			return syscall.AF_INET6, false
-		}
-		if laddr == nil {
-			return syscall.AF_INET, false
-		}
-		return laddr.family(), false
-	}
-
-	if (laddr == nil || laddr.family() == syscall.AF_INET) &&
-		(raddr == nil || raddr.family() == syscall.AF_INET) {
-		return syscall.AF_INET, false
-	}
-	return syscall.AF_INET6, false
-}
-
-//from https://github.com/golang/go
-//Changes: it is for SCTP only
-func setDefaultSockopts(s int, family int, ipv6only bool) error {
-	if family == syscall.AF_INET6 {
-		// Allow both IP versions even if the OS default
-		// is otherwise. Note that some operating systems
-		// never admit this option.
-		syscall.SetsockoptInt(s, syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, boolint(ipv6only))
-	}
-	// Allow broadcast.
-	return os.NewSyscallError("setsockopt", syscall.SetsockoptInt(s, syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1))
 }
