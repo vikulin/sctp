@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-func createSocket(laddr, raddr *SCTPAddr, init *InitMsg, mode SCTPSocketMode) (int, error) {
+func createSocket(laddr, raddr *SCTPAddr, init InitMsg, mode SCTPSocketMode) (int, error) {
 
 	if laddr == nil && raddr == nil {
 		return -1, fmt.Errorf("Neither local or remote address provided")
@@ -56,14 +56,14 @@ func createSocket(laddr, raddr *SCTPAddr, init *InitMsg, mode SCTPSocketMode) (i
 
 // setInitOpts sets options for an SCTP association initialization
 // see https://tools.ietf.org/html/rfc4960#page-25
-func setInitOpts(fd int, options *InitMsg) error {
+func setInitOpts(fd int, options InitMsg) error {
 	optlen := unsafe.Sizeof(options)
 	_, _, err := setsockopt(fd, SCTP_INITMSG, uintptr(unsafe.Pointer(&options)), uintptr(optlen))
 	return err
 }
 
 func setNumOstreams(fd, num int) error {
-	return setInitOpts(fd, &InitMsg{NumOstreams: uint16(num)})
+	return setInitOpts(fd, InitMsg{NumOstreams: uint16(num)})
 }
 
 func SCTPConnect(fd int, addr *SCTPAddr) (int, error) {
@@ -157,6 +157,5 @@ func parseOOB(b []byte) (*OOBMessage, error) {
 }
 
 func parseNotification(b []byte) (*Notification, error) {
-	noti := (*Notification)(unsafe.Pointer(&b[0]))
-	return noti, nil
+	return &Notification{Data: b}, nil
 }

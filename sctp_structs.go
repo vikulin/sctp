@@ -2,6 +2,8 @@ package sctp
 
 /*
 	#include<sys/socket.h>
+	#include<stdint.h>
+	#include<linux/sctp.h>
 */
 import "C"
 import (
@@ -77,12 +79,15 @@ type NotificationHeader struct {
 }
 
 type Notification struct {
-	Header NotificationHeader
-	Data   []byte
+	Data []byte
+}
+
+func (n *Notification) Header() *NotificationHeader {
+	return (*NotificationHeader)(unsafe.Pointer(&n.Data[0]))
 }
 
 func (n *Notification) Type() SCTPNotificationType {
-	return n.Header.Type
+	return n.Header().Type
 }
 
 func (n *Notification) GetAssociationChange() *AssociationChange {
@@ -116,6 +121,8 @@ func (n *Notification) GetAuthentication() *Authentication {
 func (n *Notification) GetSenderDry() *SenderDry {
 	return (*SenderDry)(unsafe.Pointer(&n.Data[0]))
 }
+
+//type AssociationChange C.struct_sctp_assoc_change
 
 type AssociationChange struct {
 	Type            SCTPNotificationType

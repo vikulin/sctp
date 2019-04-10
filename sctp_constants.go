@@ -1,6 +1,14 @@
 package sctp
 
+/*
+	#include<sys/socket.h>
+	#include<stdint.h>
+	#include<linux/sctp.h>
+*/
+import "C"
 import (
+	"fmt"
+
 	syscall "golang.org/x/sys/unix"
 )
 
@@ -10,7 +18,8 @@ const (
 	SCTP_BINDX_ADD_ADDR = 0x01
 	SCTP_BINDX_REM_ADDR = 0x02
 
-	MSG_NOTIFICATION = 0x8000
+	MSG_NOTIFICATION = C.MSG_NOTIFICATION
+	MSG_EOR          = C.MSG_EOR
 )
 
 const (
@@ -106,6 +115,23 @@ const (
 	SCTP_SHUTDOWN_COMP
 	SCTP_CANT_STR_ASSOC
 )
+
+func (s SCTPState) String() string {
+	switch s {
+	case SCTP_COMM_UP:
+		return "SCTP_COMM_UP"
+	case SCTP_COMM_LOST:
+		return "SCTP_COMM_LOST"
+	case SCTP_RESTART:
+		return "SCTP_RESTART"
+	case SCTP_SHUTDOWN_COMP:
+		return "SCTP_SHUTDOWN_COMP"
+	case SCTP_CANT_STR_ASSOC:
+		return "SCTP_CANT_STR_ASSOC"
+	default:
+		panic(fmt.Sprintf("Unknown SCTPState: %d", s))
+	}
+}
 
 type SCTPAddressFamily int
 

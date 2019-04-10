@@ -14,13 +14,9 @@ type SCTPConn struct {
 	_fd int32
 }
 
-func NewSCTPConnection(laddr, raddr *SCTPAddr, options *InitMsg, mode SCTPSocketMode) (*SCTPConn, error) {
+func NewSCTPConnection(laddr, raddr *SCTPAddr, options InitMsg, mode SCTPSocketMode) (*SCTPConn, error) {
 	if raddr == nil {
 		return nil, fmt.Errorf("Remote SCTPAddr is required")
-	}
-
-	if options == nil {
-		options = NewDefaultInitMsg()
 	}
 
 	fd, err := createSocket(laddr, raddr, options, mode)
@@ -59,7 +55,7 @@ func (c *SCTPConn) Read(b []byte) (int, error) {
 }
 
 func (c *SCTPConn) SetInitMsg(numOstreams, maxInstreams, maxAttempts, maxInitTimeout int) error {
-	return setInitOpts(c.fd(), &InitMsg{
+	return setInitOpts(c.fd(), InitMsg{
 		NumOstreams:    uint16(numOstreams),
 		MaxInstreams:   uint16(maxInstreams),
 		MaxAttempts:    uint16(maxAttempts),

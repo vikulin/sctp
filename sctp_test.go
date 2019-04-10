@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"unsafe"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type resolveSCTPAddrTest struct {
@@ -69,7 +71,7 @@ var sctpListenerNameTests = []*SCTPAddr{
 
 func TestSCTPListenerName(t *testing.T) {
 	for _, tt := range sctpListenerNameTests {
-		ln, err := NewSCTPListener(tt, nil, OneToOne)
+		ln, err := NewSCTPListener(tt, InitMsg{}, OneToOne)
 		if err != nil {
 			if tt == nil {
 				continue
@@ -87,7 +89,7 @@ func TestSCTPListenerName(t *testing.T) {
 func TestSCTPConcurrentAccept(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, &InitMsg{}, OneToMany)
+	ln, err := NewSCTPListener(addr, InitMsg{}, OneToMany)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +111,7 @@ func TestSCTPConcurrentAccept(t *testing.T) {
 	attempts := 10 * N
 	fails := 0
 	for i := 0; i < attempts; i++ {
-		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), nil, OneToOne)
+		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne)
 		if err != nil {
 			fails++
 		} else {
@@ -127,7 +129,7 @@ func TestSCTPConcurrentAccept(t *testing.T) {
 func TestSCTPCloseRecv(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, &InitMsg{}, OneToOne)
+	ln, err := NewSCTPListener(addr, InitMsg{}, OneToOne)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +153,7 @@ func TestSCTPCloseRecv(t *testing.T) {
 		}
 	}()
 
-	_, err = NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), nil, OneToOne)
+	_, err = NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne)
 	if err != nil {
 		t.Fatalf("failed to dial: %s", err)
 	}
@@ -167,7 +169,7 @@ func TestSCTPCloseRecv(t *testing.T) {
 func TestSCTPConcurrentOneToMany(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, &InitMsg{}, OneToMany)
+	ln, err := NewSCTPListener(addr, InitMsg{}, OneToMany)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,10 +187,12 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 					notif := (*Notification)(unsafe.Pointer(&buf[0]))
 					switch notif.Type() {
 					case SCTP_ASSOC_CHANGE:
-						assChange := notif.GetAssociationChange()
-						if assChange.State == SCTP_COMM_UP {
-							ln.SCTPWrite([]byte{0}, &SndRcvInfo{Flags: SCTP_EOF, AssocID: assChange.AssocID})
-						}
+						//t.Error(string(notif.Data))
+						//assChange := notif.GetAssociationChange()
+						spew.Dump(notif)
+						//if assChange.State == SCTP_COMM_UP {
+						//	ln.SCTPWrite([]byte{0}, &SndRcvInfo{Flags: SCTP_EOF, AssocID: assChange.AssocID})
+						//}
 					}
 				}
 
@@ -198,7 +202,7 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 	attempts := 10 * N
 	fails := 0
 	for i := 0; i < attempts; i++ {
-		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), nil, OneToOne)
+		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne)
 		if err != nil {
 			fails++
 		} else {
