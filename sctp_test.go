@@ -8,9 +8,6 @@ import (
 	"sync"
 	"syscall"
 	"testing"
-	"unsafe"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type resolveSCTPAddrTest struct {
@@ -173,29 +170,29 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	ln.Socket.SubscribeEvents(SCTP_EVENT_DATA_IO | SCTP_EVENT_ASSOCIATION)
+
 	const N = 10
 	for i := 0; i < N; i++ {
 		go func() {
 			for {
 				buf := make([]byte, 512)
-				_, _, flags, err := ln.SCTPRead(buf)
+				n, _, flags, err := ln.SCTPRead(buf)
 				if err != nil {
 					break
 				}
 
 				if flags&MSG_NOTIFICATION > 0 {
-					notif := (*Notification)(unsafe.Pointer(&buf[0]))
+					notif, _ := parseNotification(buf[:n])
 					switch notif.Type() {
 					case SCTP_ASSOC_CHANGE:
-						//t.Error(string(notif.Data))
-						//assChange := notif.GetAssociationChange()
-						spew.Dump(notif)
-						//if assChange.State == SCTP_COMM_UP {
-						//	ln.SCTPWrite([]byte{0}, &SndRcvInfo{Flags: SCTP_EOF, AssocID: assChange.AssocID})
-						//}
+						assocChange := notif.GetAssociationChange()
+						if assocChange.State == SCTP_COMM_UP {
+							ln.SCTPWrite([]byte{0}, &SndRcvInfo{Flags: SCTP_EOF, AssocID: assocChange.AssocID})
+						}
 					}
 				}
-
 			}
 		}()
 	}
