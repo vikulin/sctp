@@ -82,6 +82,31 @@ const (
 	SCTP_SENDER_DRY_EVENT
 )
 
+func (n SCTPNotificationType) String() string {
+	switch n {
+	case SCTP_ASSOC_CHANGE:
+		return "SCTP_ASSOC_CHANGE"
+	case SCTP_PEER_ADDR_CHANGE:
+		return "SCTP_PEER_ADDR_CHANGE"
+	case SCTP_SEND_FAILED:
+		return "SCTP_SEND_FAILED"
+	case SCTP_REMOTE_ERROR:
+		return "SCTP_REMOTE_ERROR"
+	case SCTP_SHUTDOWN_EVENT:
+		return "SCTP_SHUTDOWN_EVENT"
+	case SCTP_PARTIAL_DELIVERY_EVENT:
+		return "SCTP_PARTIAL_DELIVERY_EVENT"
+	case SCTP_ADAPTATION_INDICATION:
+		return "SCTP_ADAPTATION_INDICATION"
+	case SCTP_AUTHENTICATION_INDICATION:
+		return "SCTP_AUTHENTICATION_INDICATION"
+	case SCTP_SENDER_DRY_EVENT:
+		return "SCTP_SENDER_DRY_EVENT"
+	default:
+		panic(fmt.Sprintf("Unknown notification type: %d", n))
+	}
+}
+
 type SCTPCmsgType int32
 
 func (t SCTPCmsgType) i32() int32 { return int32(t) }

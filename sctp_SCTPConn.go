@@ -214,13 +214,18 @@ func (c *SCTPConn) PeelOff(id int) (*SCTPConn, error) {
 	}
 	param := peeloffArg{
 		assocId: int32(id),
+		//sd:      -1,
 	}
 	optlen := unsafe.Sizeof(param)
-	_, _, err := getsockopt(c.fd(), SCTP_SOCKOPT_PEELOFF, uintptr(unsafe.Pointer(&param)), uintptr(unsafe.Pointer(&optlen)))
+	r0, _, err := getsockopt(c.fd(), SCTP_SOCKOPT_PEELOFF, uintptr(unsafe.Pointer(&param)), uintptr(unsafe.Pointer(&optlen)))
 	if err != nil {
 		return nil, err
 	}
-	return &SCTPConn{_fd: int32(param.sd)}, nil
+	// Note, for some reason, the struct isn't getting populated after the syscall. But the return values are right, so we use r0 which is our fd that we want.
+	if param.sd == -1 || r0 == 0 {
+		return nil, fmt.Errorf("Returned fd is negative!")
+	}
+	return &SCTPConn{_fd: int32(r0)}, nil
 }
 
 func (c *SCTPConn) SetDeadline(t time.Time) error {

@@ -211,3 +211,171 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 		t.Fatalf("# of failed Dials: %v", fails)
 	}
 }
+
+func TestOneToManyPeelOff(t *testing.T) {
+
+	const (
+		SERVER_ROUTINE_COUNT = 10
+		CLIENT_ROUTINE_COUNT = 100
+	)
+	var wg sync.WaitGroup
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
+	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
+	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToMany)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	laddr, _ := ln.LocalAddr().(*SCTPAddr)
+
+	ln.Socket.SubscribeEvents(SCTP_EVENT_ASSOCIATION)
+
+	go func() {
+		test := 999
+		count := 0
+		for {
+			t.Logf("[%d]Reading from server socket...\n", test)
+			buf := make([]byte, 512)
+			n, oob, flags, err := ln.SCTPRead(buf)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				t.Fatalf("[%d]Got an error reading from main socket", test)
+			}
+
+			if flags&MSG_NOTIFICATION > 0 {
+				t.Logf("[%d]Got a notification. Bytes read: %v\n", test, n)
+				notif, _ := parseNotification(buf[:n])
+				switch notif.Type() {
+				case SCTP_ASSOC_CHANGE:
+					t.Logf("[%d]Got an association change notification\n", test)
+					assocChange := notif.GetAssociationChange()
+					if assocChange.State == SCTP_COMM_UP {
+						t.Logf("[%d]SCTP_COMM_UP. Creating socket for association: %v\n", test, assocChange.AssocID)
+						newSocket, err := ln.Socket.PeelOff(int(assocChange.AssocID))
+						if err != nil {
+							t.Fatalf("Failed to peel off socket: %v", err)
+						}
+						t.Logf("[%d]Peeled off socket: %#+v\n", test, newSocket)
+						if err := newSocket.SubscribeEvents(SCTP_EVENT_DATA_IO); err != nil {
+							t.Logf("[%d]Failed to subscribe to data io for peeled off socket: %v -> %#+v\n", test, err, newSocket)
+						}
+						count++
+						go socketReaderMirror(newSocket, t, test-count)
+						continue
+					}
+				}
+			}
+
+			if flags&MSG_EOR > 0 {
+				info := oob.GetSndRcvInfo()
+				t.Logf("[%d]Got data on main socket, but it wasn't a notification: %#+v \n", test, info)
+				wn, werr := ln.SCTPWrite(buf[:n],
+					&SndRcvInfo{
+						AssocID: info.AssocID,
+						Stream:  info.Stream,
+						PPID:    info.PPID,
+					},
+				)
+				if werr != nil {
+					t.Errorf("[%d]failed to write %s, len: %d, err: %v, bytes written: %d, info: %+v", test, string(buf[:n]), len(buf[:n]), werr, wn, info)
+					return
+				}
+				continue
+			}
+			t.Logf("[%d]No clue wtf is happening", test)
+		}
+	}()
+
+	for i := CLIENT_ROUTINE_COUNT; i > 0; i-- {
+		wg.Add(1)
+		go func(client int, l *SCTPAddr) {
+			defer wg.Done()
+			t.Logf("[%d]Creating new client connection\n", client)
+			c, err := NewSCTPConnection(nil, l, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne)
+			if err != nil {
+				t.Fatalf("[%d]Failed to connect to SCTP server: %v", client, err)
+			}
+			c.SubscribeEvents(SCTP_EVENT_DATA_IO)
+			for q := range []int{0, 1} {
+				rstring := randomString(10)
+				rstream := uint16(r.Intn(STREAM_TEST_STREAMS))
+				t.Logf("[%d]Writing to client socket. Data:%v, Stream:%v, MsgCount:%v \n", client, rstring, rstream, q)
+				_, err = c.SCTPWrite(
+					[]byte(rstring),
+					&SndRcvInfo{
+						Stream: rstream,
+						PPID:   uint32(q),
+					},
+				)
+				if err != nil {
+					t.Fatalf("Failed to send data to SCTP server: %v", err)
+				}
+
+				t.Logf("[%d]Reading from client socket...\n", client)
+				buf := make([]byte, 512)
+				n, oob, _, err := c.SCTPRead(buf)
+				if err != nil {
+					t.Fatalf("Failed to read from client socket: %v", err)
+				}
+				if oob == nil {
+					t.Fatal("WTF. OOB is nil?!")
+				}
+				t.Logf("[%d]***Read from client socket\n", client)
+				if oob.GetSndRcvInfo().Stream != rstream {
+					t.Fatalf("Data received on a stream(%v) we didn't send(%v) on",
+						oob.GetSndRcvInfo().Stream,
+						rstream)
+				}
+				if string(buf[:n]) != rstring {
+					t.Fatalf("Data from server doesn't match what client sent\nSent: %v\nReceived: %v",
+						rstring,
+						string(buf[:n]),
+					)
+				}
+				t.Logf("[%d]Client read success! MsgCount: %v\n", client, q)
+			}
+			c.Close()
+
+		}(i, laddr)
+	}
+	wg.Wait()
+	ln.Close()
+}
+
+func socketReaderMirror(sock *SCTPConn, t *testing.T, goroutine int) {
+	for {
+		t.Logf("[%d]Reading peel off server socket...\n", goroutine)
+		buf := make([]byte, 512)
+		n, oob, flags, err := sock.SCTPRead(buf)
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF || err == syscall.ENOTCONN {
+				t.Logf("[%d]Got EOF...\n", goroutine)
+				sock.Close()
+				break
+			}
+			t.Fatalf("[%d]Failed to read from socket: %#+v", goroutine, err)
+		}
+
+		if flags&MSG_NOTIFICATION > 0 {
+			t.Logf("[%d]Notification received. Byte count: %v, OOB: %#+v, Flags: %v\n", goroutine, n, oob, flags)
+			if notif, err := parseNotification(buf[:n]); err == nil {
+				t.Logf("[%d]Notification type: %v\n", goroutine, notif.Type().String())
+			}
+		}
+		t.Logf("[%d]Writing peel off server socket...\n", goroutine)
+		info := oob.GetSndRcvInfo()
+		wn, werr := sock.SCTPWrite(buf[:n],
+			&SndRcvInfo{
+				AssocID: info.AssocID,
+				Stream:  info.Stream,
+				PPID:    info.PPID,
+			},
+		)
+		if werr != nil {
+			t.Errorf("[%d]failed to write %s, len: %d, err: %v, bytes written: %d, info: %+v", goroutine, string(buf[:n]), len(buf[:n]), werr, wn, info)
+			return
+		}
+	}
+}
