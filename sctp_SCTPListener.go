@@ -17,12 +17,12 @@ func (ln *SCTPListener) fd() int {
 	return int(atomic.LoadInt32(&ln._fd))
 }
 
-func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode) (*SCTPListener, error) {
+func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPListener, error) {
 	if laddr == nil {
 		return nil, fmt.Errorf("Local SCTPAddr is required")
 	}
 
-	fd, err := createSocket(laddr, nil, init, mode)
+	fd, err := createSocket(laddr, nil, init, mode, nonblocking)
 	if err != nil {
 		return nil, err
 	}

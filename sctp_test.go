@@ -68,7 +68,7 @@ var sctpListenerNameTests = []*SCTPAddr{
 
 func TestSCTPListenerName(t *testing.T) {
 	for _, tt := range sctpListenerNameTests {
-		ln, err := NewSCTPListener(tt, InitMsg{}, OneToOne)
+		ln, err := NewSCTPListener(tt, InitMsg{}, OneToOne, false)
 		if err != nil {
 			if tt == nil {
 				continue
@@ -86,7 +86,7 @@ func TestSCTPListenerName(t *testing.T) {
 func TestSCTPConcurrentAccept(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, InitMsg{}, OneToMany)
+	ln, err := NewSCTPListener(addr, InitMsg{}, OneToMany, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSCTPConcurrentAccept(t *testing.T) {
 	attempts := 10 * N
 	fails := 0
 	for i := 0; i < attempts; i++ {
-		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne)
+		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne, false)
 		if err != nil {
 			fails++
 		} else {
@@ -126,7 +126,7 @@ func TestSCTPConcurrentAccept(t *testing.T) {
 func TestSCTPCloseRecv(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, InitMsg{}, OneToOne)
+	ln, err := NewSCTPListener(addr, InitMsg{}, OneToOne, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestSCTPCloseRecv(t *testing.T) {
 		}
 	}()
 
-	_, err = NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne)
+	_, err = NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne, false)
 	if err != nil {
 		t.Fatalf("failed to dial: %s", err)
 	}
@@ -166,7 +166,7 @@ func TestSCTPCloseRecv(t *testing.T) {
 func TestSCTPConcurrentOneToMany(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, InitMsg{}, OneToMany)
+	ln, err := NewSCTPListener(addr, InitMsg{}, OneToMany, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 	attempts := 10 * N
 	fails := 0
 	for i := 0; i < attempts; i++ {
-		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne)
+		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne, false)
 		if err != nil {
 			fails++
 		} else {
@@ -221,7 +221,7 @@ func TestOneToManyPeelOff(t *testing.T) {
 	var wg sync.WaitGroup
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(4))
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToMany)
+	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToMany, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestOneToManyPeelOff(t *testing.T) {
 		go func(client int, l *SCTPAddr) {
 			defer wg.Done()
 			t.Logf("[%d]Creating new client connection\n", client)
-			c, err := NewSCTPConnection(nil, l, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne)
+			c, err := NewSCTPConnection(nil, l, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne, false)
 			if err != nil {
 				t.Fatalf("[%d]Failed to connect to SCTP server: %v", client, err)
 			}

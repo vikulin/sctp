@@ -35,7 +35,7 @@ func randomString(length int) string {
 
 func TestStreamsOneToOne(t *testing.T) {
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne)
+	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne, false)
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestStreamsOneToOne(t *testing.T) {
 			defer func() { wait <- struct{}{} }()
 			conn, err := NewSCTPConnection(nil, addr,
 				InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS},
-				OneToOne)
+				OneToOne, false)
 			if err != nil {
 				t.Errorf("failed to dial address %s, test #%d: %v", addr.String(), test, err)
 				return
@@ -177,7 +177,7 @@ func TestStreamsOneToOne(t *testing.T) {
 
 func TestStreamsOneToMany(t *testing.T) {
 	addr, _ := ResolveSCTPAddr(SCTP4, "127.0.0.1:0")
-	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToMany)
+	ln, err := NewSCTPListener(addr, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToMany, false)
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestStreamsOneToMany(t *testing.T) {
 			t.Log("Creating client connection")
 			conn, err := NewSCTPConnection(nil, addr,
 				InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS},
-				OneToOne)
+				OneToOne, false)
 			if err != nil {
 				t.Errorf("failed to dial address %s, test #%d: %v", addr.String(), test, err)
 				return

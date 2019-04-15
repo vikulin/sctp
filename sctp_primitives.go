@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-func createSocket(laddr, raddr *SCTPAddr, init InitMsg, mode SCTPSocketMode) (int, error) {
+func createSocket(laddr, raddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonblocking bool) (int, error) {
 
 	if laddr == nil && raddr == nil {
 		return -1, fmt.Errorf("Neither local or remote address provided")
@@ -47,6 +47,12 @@ func createSocket(laddr, raddr *SCTPAddr, init InitMsg, mode SCTPSocketMode) (in
 	if laddr != nil {
 		err := SCTPBind(fd, laddr, SCTP_BINDX_ADD_ADDR)
 		if err != nil {
+			return -1, err
+		}
+	}
+
+	if nonblocking {
+		if err := syscall.SetNonblock(fd, nonblocking); err != nil {
 			return -1, err
 		}
 	}

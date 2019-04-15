@@ -14,12 +14,12 @@ type SCTPConn struct {
 	_fd int32
 }
 
-func NewSCTPConnection(laddr, raddr *SCTPAddr, options InitMsg, mode SCTPSocketMode) (*SCTPConn, error) {
+func NewSCTPConnection(laddr, raddr *SCTPAddr, options InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPConn, error) {
 	if raddr == nil {
 		return nil, fmt.Errorf("Remote SCTPAddr is required")
 	}
 
-	fd, err := createSocket(laddr, raddr, options, mode)
+	fd, err := createSocket(laddr, raddr, options, mode, nonblocking)
 	if err != nil {
 		return nil, err
 	}
