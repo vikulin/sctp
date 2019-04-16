@@ -37,6 +37,11 @@ func TestNonBlockingServerOneToMany(t *testing.T) {
 					t.Logf("READ EAGAIN\n")
 					goto WRITE
 				}
+				if err == syscall.EBADF {
+					// We're closed
+					t.Log("Server connection is closed")
+					return
+				}
 				t.Errorf("Server connection read err: %v", err)
 				return
 			}
