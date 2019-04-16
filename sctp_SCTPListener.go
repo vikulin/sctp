@@ -22,7 +22,7 @@ func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonbloc
 		return nil, fmt.Errorf("Local SCTPAddr is required")
 	}
 
-	fd, err := createSocket(laddr, nil, init, mode, nonblocking)
+	fd, err := CreateSCTPSocket(laddr, nil, init, mode, nonblocking)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonbloc
 	var socket *SCTPConn
 
 	if mode == OneToMany {
-		socket = newSCTPConn(fd)
+		socket = NewSCTPConn(fd)
 	}
 
 	return &SCTPListener{
@@ -55,7 +55,7 @@ func (ln *SCTPListener) AcceptSCTP() (*SCTPConn, error) {
 		return nil, err
 	}
 
-	return newSCTPConn(fd), nil
+	return NewSCTPConn(fd), nil
 }
 
 // Accept waits for and returns the next connection connection to the listener.

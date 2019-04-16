@@ -19,7 +19,7 @@ func NewSCTPConnection(laddr, raddr *SCTPAddr, options InitMsg, mode SCTPSocketM
 		return nil, fmt.Errorf("Remote SCTPAddr is required")
 	}
 
-	fd, err := createSocket(laddr, raddr, options, mode, nonblocking)
+	fd, err := CreateSCTPSocket(laddr, raddr, options, mode, nonblocking)
 	if err != nil {
 		return nil, err
 	}
@@ -28,14 +28,14 @@ func NewSCTPConnection(laddr, raddr *SCTPAddr, options InitMsg, mode SCTPSocketM
 	if err != nil {
 		return nil, err
 	}
-	return newSCTPConn(fd), nil
+	return NewSCTPConn(fd), nil
 }
 
 func (c *SCTPConn) fd() int {
 	return int(atomic.LoadInt32(&c._fd))
 }
 
-func newSCTPConn(fd int) *SCTPConn {
+func NewSCTPConn(fd int) *SCTPConn {
 	conn := &SCTPConn{
 		_fd: int32(fd),
 	}
