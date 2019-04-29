@@ -17,11 +17,12 @@ func TestNonBlockingServerOneToMany(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
-
-	ln.Socket.SubscribeEvents(SCTP_EVENT_DATA_IO)
-
 	raddr := ln.LocalAddr().(*SCTPAddr)
+	t.Logf("Listening on: %v\n", raddr)
 
+	ln.SetEvents(SCTP_EVENT_DATA_IO)
+
+	t.Logf("Starting main server loop...\n")
 	go func() {
 		type ready struct {
 			SndRcvInfo *SndRcvInfo
@@ -31,19 +32,19 @@ func TestNonBlockingServerOneToMany(t *testing.T) {
 		c := make([]*ready, 0)
 		for {
 			buf := make([]byte, 64)
+			t.Logf("Server read\n")
 			n, oob, flags, err := ln.SCTPRead(buf)
 			if err != nil {
-				if err == syscall.EAGAIN {
-					t.Logf("READ EAGAIN\n")
+				switch err {
+				case syscall.EAGAIN:
 					goto WRITE
-				}
-				if err == syscall.EBADF {
-					// We're closed
-					t.Log("Server connection is closed")
+				case syscall.EBADF:
 					return
+				case syscall.ENOTCONN:
+					return
+				default:
+					t.Fatalf("Server socket error: %v", err)
 				}
-				t.Errorf("Server connection read err: %v", err)
-				return
 			}
 
 			t.Logf("DATA: %v, N: %d, OOB: %#+v, FLAGS: %d, ERR: %v\n", buf[:n], n, oob, flags, err)
@@ -105,24 +106,31 @@ func TestNonBlockingServerOneToMany(t *testing.T) {
 			}
 
 			<-time.Tick(time.Millisecond * 10)
+			t.Logf("tick!\n")
 		}
 	}()
 
+	t.Logf("Starting client connections...\n")
 	var wg sync.WaitGroup
 	for i := 0; i < STREAM_TEST_CLIENTS; i++ {
 		wg.Add(1)
 		go func(test int) {
 			defer wg.Done()
 
-			conn, err := NewSCTPConnection(nil, raddr,
+			conn, err := NewSCTPConnection(SCTP6,
 				InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS},
 				OneToOne, false)
 			if err != nil {
 				t.Errorf("failed to dial address %s, test #%d: %v", raddr.String(), test, err)
 				return
 			}
+			t.Logf("Connecting to: %v...", raddr)
+			if err := conn.Connect(raddr); err != nil {
+				t.Fatalf("Failed to connect to server: %v", err)
+			}
+			t.Logf("Success!\n")
 			defer conn.Close()
-			conn.SubscribeEvents(SCTP_EVENT_DATA_IO)
+			conn.SetEvents(SCTP_EVENT_DATA_IO)
 			for ppid := uint16(0); ppid < STREAM_TEST_STREAMS; ppid++ {
 				info := &SndRcvInfo{
 					Stream: uint16(ppid),
@@ -130,7 +138,7 @@ func TestNonBlockingServerOneToMany(t *testing.T) {
 				}
 				randomLen := r.Intn(5) + 1
 				text := fmt.Sprintf("[%s,%d,%d]", randomString(randomLen), test, ppid)
-				t.Logf("Sending data to server: %v", text)
+				t.Logf("Sending data to server: %v\n", text)
 				n, err := conn.SCTPWrite([]byte(text), info)
 				if err != nil {
 					t.Errorf("failed to write %s, len: %d, err: %v, bytes written: %d, info: %+v", text, len(text), err, n, info)
@@ -165,7 +173,7 @@ func TestNonBlockingServerOneToMany(t *testing.T) {
 						if rtext != text {
 							t.Fatalf("Mismatched payload: %s != %s", []byte(rtext), []byte(text))
 						}
-						t.Log("Data read from server matched what we sent")
+						t.Logf("Data read from server matched what we sent")
 
 						break
 					}

@@ -163,6 +163,7 @@ type SCTPAddressFamily int
 const (
 	SCTP4 = SCTPAddressFamily(iota)
 	SCTP6
+	SCTP6Only
 )
 
 func (af SCTPAddressFamily) ToSyscall() int {
@@ -171,6 +172,8 @@ func (af SCTPAddressFamily) ToSyscall() int {
 	case SCTP4:
 		return syscall.AF_INET
 	case SCTP6:
+		return syscall.AF_INET6
+	case SCTP6Only:
 		return syscall.AF_INET6
 	default:
 		panic("Invalid SCTPAddressFamily")
@@ -182,6 +185,8 @@ func (af SCTPAddressFamily) String() string {
 	case SCTP4:
 		return "ip4"
 	case SCTP6:
+		return "ip6"
+	case SCTP6Only:
 		return "ip6"
 	default:
 		panic("Invalid SCTPAddressFamily")

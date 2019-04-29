@@ -3,11 +3,11 @@ package sctp
 import (
 	"bytes"
 	"fmt"
-	syscall "golang.org/x/sys/unix"
 	"net"
 	"strconv"
 	"strings"
-	"unsafe"
+
+	syscall "golang.org/x/sys/unix"
 )
 
 type SCTPAddr struct {
@@ -149,61 +149,6 @@ func (a *SCTPAddr) String() string {
 	return b.String()
 }
 
-func resolveFromRawAddr(ptr unsafe.Pointer, n int) (*SCTPAddr, error) {
-	addr := &SCTPAddr{
-		IPAddrs: make([]net.IPAddr, n),
-	}
-
-	switch family := (*(*syscall.RawSockaddrAny)(ptr)).Addr.Family; family {
-	case syscall.AF_INET:
-		addr.Port = int(ntohs(uint16((*(*syscall.RawSockaddrInet4)(ptr)).Port)))
-		tmp := syscall.RawSockaddrInet4{}
-		size := unsafe.Sizeof(tmp)
-		for i := 0; i < n; i++ {
-			a := *(*syscall.RawSockaddrInet4)(unsafe.Pointer(
-				uintptr(ptr) + size*uintptr(i)))
-			addr.IPAddrs[i] = net.IPAddr{IP: a.Addr[:]}
-		}
-	case syscall.AF_INET6:
-		addr.Port = int(ntohs(uint16((*(*syscall.RawSockaddrInet4)(ptr)).Port)))
-		tmp := syscall.RawSockaddrInet6{}
-		size := unsafe.Sizeof(tmp)
-		for i := 0; i < n; i++ {
-			a := *(*syscall.RawSockaddrInet6)(unsafe.Pointer(
-				uintptr(ptr) + size*uintptr(i)))
-			var zone string
-			ifi, err := net.InterfaceByIndex(int(a.Scope_id))
-			if err == nil {
-				zone = ifi.Name
-			}
-			addr.IPAddrs[i] = net.IPAddr{IP: a.Addr[:], Zone: zone}
-		}
-	default:
-		return nil, fmt.Errorf("unknown address family: %d", family)
-	}
-	return addr, nil
-}
-
-func sctpGetAddrs(fd, id, optname int) (*SCTPAddr, error) {
-
-	type getaddrs struct {
-		assocId int32
-		addrNum uint32
-		addrs   [4096]byte
-	}
-	param := getaddrs{
-		assocId: int32(id),
-	}
-	optlen := unsafe.Sizeof(param)
-	_, _, err := getsockopt(fd, uintptr(optname), uintptr(unsafe.Pointer(&param)), uintptr(unsafe.Pointer(&optlen)))
-	if err != nil {
-		return nil, err
-	}
-	return resolveFromRawAddr(unsafe.Pointer(&param.addrs), int(param.addrNum))
-}
-
-//from https://github.com/golang/go
-//Change: we check the first IP address in the list of candidate SCTP IP addresses
 func (a *SCTPAddr) isWildcard() bool {
 	if a == nil {
 		return true
@@ -215,7 +160,7 @@ func (a *SCTPAddr) isWildcard() bool {
 	return a.IPAddrs[0].IP.IsUnspecified()
 }
 
-func favoriteAddrFamily(laddr *SCTPAddr, raddr *SCTPAddr) (family int, ipv6only bool) {
+func SCTPAddrFamily(laddr *SCTPAddr, raddr *SCTPAddr) (family int, ipv6only bool) {
 
 	if laddr != nil && raddr != nil {
 

@@ -1,45 +1,75 @@
 package sctp
 
 import (
-	"fmt"
-	syscall "golang.org/x/sys/unix"
-	"io"
 	"net"
 	"sync/atomic"
 	"time"
-	"unsafe"
+
+	syscall "golang.org/x/sys/unix"
 )
 
 type SCTPConn struct {
-	_fd int32
+	fd int32
 }
 
-func NewSCTPConnection(laddr, raddr *SCTPAddr, options InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPConn, error) {
-	if raddr == nil {
-		return nil, fmt.Errorf("Remote SCTPAddr is required")
-	}
+func NewSCTPConnection(af SCTPAddressFamily, options InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPConn, error) {
 
-	fd, err := CreateSCTPSocket(laddr, raddr, options, mode, nonblocking)
+	fd, err := SCTPSocket(af.ToSyscall(), mode)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = SCTPConnect(fd, raddr)
-	if err != nil {
+	// close socket on error
+	defer func(f int) {
+		if err != nil {
+			syscall.Close(f)
+		}
+	}(fd)
+
+	if err = SCTPSetDefaultSockopts(fd, af.ToSyscall(), af == SCTP6Only); err != nil {
 		return nil, err
 	}
-	return NewSCTPConn(fd), nil
-}
 
-func (c *SCTPConn) fd() int {
-	return int(atomic.LoadInt32(&c._fd))
-}
-
-func NewSCTPConn(fd int) *SCTPConn {
-	conn := &SCTPConn{
-		_fd: int32(fd),
+	if err = SCTPSetInitOpts(fd, options); err != nil {
+		return nil, err
 	}
-	return conn
+
+	if err := syscall.SetNonblock(fd, nonblocking); err != nil {
+		return nil, err
+	}
+
+	return &SCTPConn{
+		fd: int32(fd),
+	}, nil
+}
+
+func (c *SCTPConn) GetSocketMode() (SCTPSocketMode, error) {
+	return SCTPGetSocketMode(c.FD())
+}
+
+func (c *SCTPConn) GetNonblocking() (bool, error) {
+	return SCTPGetNonblocking(c.FD())
+}
+
+func (c *SCTPConn) SetNonblocking(val bool) error {
+	return SCTPSetNonblocking(c.FD(), val)
+}
+
+func (c *SCTPConn) Listen() error {
+	return SCTPListen(c.FD())
+}
+
+func (c *SCTPConn) Bind(laddr *SCTPAddr) error {
+	return SCTPBind(c.FD(), laddr, SCTP_BINDX_ADD_ADDR)
+}
+
+func (c *SCTPConn) Connect(raddr *SCTPAddr) error {
+	_, err := SCTPConnect(c.FD(), raddr)
+	return err
+}
+
+func (c *SCTPConn) FD() int {
+	return int(atomic.LoadInt32(&c.fd))
 }
 
 func (c *SCTPConn) Write(b []byte) (int, error) {
@@ -54,178 +84,71 @@ func (c *SCTPConn) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func (c *SCTPConn) SetInitMsg(numOstreams, maxInstreams, maxAttempts, maxInitTimeout int) error {
-	return setInitOpts(c.fd(), InitMsg{
-		NumOstreams:    uint16(numOstreams),
-		MaxInstreams:   uint16(maxInstreams),
-		MaxAttempts:    uint16(maxAttempts),
-		MaxInitTimeout: uint16(maxInitTimeout),
-	})
+func (c *SCTPConn) SetEvents(flags int) error {
+	return SCTPSetEvents(c.FD(), flags)
 }
 
-func (c *SCTPConn) SubscribeEvents(flags int) error {
-	var d, a, ad, sf, p, sh, pa, ada, au, se uint8
-	if flags&SCTP_EVENT_DATA_IO > 0 {
-		d = 1
-	}
-	if flags&SCTP_EVENT_ASSOCIATION > 0 {
-		a = 1
-	}
-	if flags&SCTP_EVENT_ADDRESS > 0 {
-		ad = 1
-	}
-	if flags&SCTP_EVENT_SEND_FAILURE > 0 {
-		sf = 1
-	}
-	if flags&SCTP_EVENT_PEER_ERROR > 0 {
-		p = 1
-	}
-	if flags&SCTP_EVENT_SHUTDOWN > 0 {
-		sh = 1
-	}
-	if flags&SCTP_EVENT_PARTIAL_DELIVERY > 0 {
-		pa = 1
-	}
-	if flags&SCTP_EVENT_ADAPTATION_LAYER > 0 {
-		ada = 1
-	}
-	if flags&SCTP_EVENT_AUTHENTICATION > 0 {
-		au = 1
-	}
-	if flags&SCTP_EVENT_SENDER_DRY > 0 {
-		se = 1
-	}
-	param := EventSubscribe{
-		DataIO:          d,
-		Association:     a,
-		Address:         ad,
-		SendFailure:     sf,
-		PeerError:       p,
-		Shutdown:        sh,
-		PartialDelivery: pa,
-		AdaptationLayer: ada,
-		Authentication:  au,
-		SenderDry:       se,
-	}
-	optlen := unsafe.Sizeof(param)
-	_, _, err := setsockopt(c.fd(), SCTP_EVENTS, uintptr(unsafe.Pointer(&param)), uintptr(optlen))
-	return err
-}
-
-func (c *SCTPConn) SubscribedEvents() (int, error) {
-	param := EventSubscribe{}
-	optlen := unsafe.Sizeof(param)
-	_, _, err := getsockopt(c.fd(), SCTP_EVENTS, uintptr(unsafe.Pointer(&param)), uintptr(unsafe.Pointer(&optlen)))
-	if err != nil {
-		return 0, err
-	}
-	var flags int
-	if param.DataIO > 0 {
-		flags |= SCTP_EVENT_DATA_IO
-	}
-	if param.Association > 0 {
-		flags |= SCTP_EVENT_ASSOCIATION
-	}
-	if param.Address > 0 {
-		flags |= SCTP_EVENT_ADDRESS
-	}
-	if param.SendFailure > 0 {
-		flags |= SCTP_EVENT_SEND_FAILURE
-	}
-	if param.PeerError > 0 {
-		flags |= SCTP_EVENT_PEER_ERROR
-	}
-	if param.Shutdown > 0 {
-		flags |= SCTP_EVENT_SHUTDOWN
-	}
-	if param.PartialDelivery > 0 {
-		flags |= SCTP_EVENT_PARTIAL_DELIVERY
-	}
-	if param.AdaptationLayer > 0 {
-		flags |= SCTP_EVENT_ADAPTATION_LAYER
-	}
-	if param.Authentication > 0 {
-		flags |= SCTP_EVENT_AUTHENTICATION
-	}
-	if param.SenderDry > 0 {
-		flags |= SCTP_EVENT_SENDER_DRY
-	}
-	return flags, nil
+func (c *SCTPConn) GetEvents() (int, error) {
+	return SCTPGetEvents(c.FD())
 }
 
 func (c *SCTPConn) SetDefaultSentParam(info *SndRcvInfo) error {
-	optlen := unsafe.Sizeof(*info)
-	_, _, err := setsockopt(c.fd(), SCTP_DEFAULT_SENT_PARAM, uintptr(unsafe.Pointer(info)), uintptr(optlen))
-	return err
+	return SCTPSetDefaultSentParam(c.FD(), info)
 }
 
 func (c *SCTPConn) GetDefaultSentParam() (*SndRcvInfo, error) {
-	info := &SndRcvInfo{}
-	optlen := unsafe.Sizeof(*info)
-	_, _, err := getsockopt(c.fd(), SCTP_DEFAULT_SENT_PARAM, uintptr(unsafe.Pointer(info)), uintptr(unsafe.Pointer(&optlen)))
-	return info, err
+	return SCTPGetDefaultSentParam(c.FD())
 }
 
 func (c *SCTPConn) SCTPGetPrimaryPeerAddr() (*SCTPAddr, error) {
-
-	type sctpGetSetPrim struct {
-		assocId int32
-		addrs   [128]byte
-	}
-	param := sctpGetSetPrim{
-		assocId: int32(0),
-	}
-	optlen := unsafe.Sizeof(param)
-	_, _, err := getsockopt(c.fd(), SCTP_PRIMARY_ADDR, uintptr(unsafe.Pointer(&param)), uintptr(unsafe.Pointer(&optlen)))
-	if err != nil {
-		return nil, err
-	}
-	return resolveFromRawAddr(unsafe.Pointer(&param.addrs), 1)
+	return SCTPGetAddrs(c.FD(), 0, SCTP_PRIMARY_ADDR)
 }
 
-func (c *SCTPConn) SCTPLocalAddr(id int) (*SCTPAddr, error) {
-	return sctpGetAddrs(c.fd(), id, SCTP_GET_LOCAL_ADDRS)
+func (c *SCTPConn) SCTPLocalAddr(id uint16) (*SCTPAddr, error) {
+	return SCTPGetLocalAddr(c.FD(), id)
 }
 
 func (c *SCTPConn) LocalAddr() net.Addr {
-	addr, err := sctpGetAddrs(c.fd(), 0, SCTP_GET_LOCAL_ADDRS)
+	addr, err := c.SCTPLocalAddr(0)
 	if err != nil {
 		return nil
 	}
 	return addr
+}
+
+func (c *SCTPConn) SCTPRemoteAddr(id uint16) (*SCTPAddr, error) {
+	return SCTPGetRemoteAddr(c.FD(), id)
 }
 
 func (c *SCTPConn) RemoteAddr() net.Addr {
-	addr, err := sctpGetAddrs(c.fd(), 0, SCTP_GET_PEER_ADDRS)
+	addr, err := c.SCTPRemoteAddr(0)
 	if err != nil {
 		return nil
 	}
 	return addr
 }
 
-func (c *SCTPConn) SCTPRemoteAddr(id int) (*SCTPAddr, error) {
-	return sctpGetAddrs(c.fd(), id, SCTP_GET_PEER_ADDRS)
-}
-
-func (c *SCTPConn) PeelOff(id int) (*SCTPConn, error) {
-	type peeloffArg struct {
-		assocId int32
-		sd      int
-	}
-	param := peeloffArg{
-		assocId: int32(id),
-		//sd:      -1,
-	}
-	optlen := unsafe.Sizeof(param)
-	r0, _, err := getsockopt(c.fd(), SCTP_SOCKOPT_PEELOFF, uintptr(unsafe.Pointer(&param)), uintptr(unsafe.Pointer(&optlen)))
+func (c *SCTPConn) PeelOff(id int32) (*SCTPConn, error) {
+	fd, err := SCTPPeelOff(c.FD(), id)
 	if err != nil {
 		return nil, err
 	}
-	// Note, for some reason, the struct isn't getting populated after the syscall. But the return values are right, so we use r0 which is our fd that we want.
-	if param.sd == -1 || r0 == 0 {
-		return nil, fmt.Errorf("Returned fd is negative!")
+
+	conn := &SCTPConn{
+		fd: int32(fd),
 	}
-	return &SCTPConn{_fd: int32(r0)}, nil
+
+	blocking, err := c.GetNonblocking()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := conn.SetNonblocking(blocking); err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+
 }
 
 func (c *SCTPConn) SetDeadline(t time.Time) error {
@@ -241,56 +164,13 @@ func (c *SCTPConn) SetWriteDeadline(t time.Time) error {
 }
 
 func (c *SCTPConn) SCTPWrite(b []byte, info *SndRcvInfo) (int, error) {
-	var cbuf []byte
-	if info != nil {
-		cmsgBuf := toBuf(info)
-		hdr := &syscall.Cmsghdr{
-			Level: syscall.IPPROTO_SCTP,
-			Type:  SCTP_CMSG_SNDRCV.i32(),
-		}
-
-		// bitwidth of hdr.Len is platform-specific,
-		// so we use hdr.SetLen() rather than directly setting hdr.Len
-		hdr.SetLen(syscall.CmsgSpace(len(cmsgBuf)))
-		cbuf = append(toBuf(hdr), cmsgBuf...)
-	}
-	return syscall.SendmsgN(c.fd(), b, cbuf, nil, 0)
+	return SCTPWrite(c.FD(), b, info)
 }
 
-func (c *SCTPConn) SCTPRead(dataBuffer []byte) (dataCount int, oob *OOBMessage, flags int, err error) {
-
-	oobBuffer := make([]byte, 254)
-	oobCount := 0
-
-	dataCount, oobCount, flags, _, err = syscall.Recvmsg(c.fd(), dataBuffer, oobBuffer, 0)
-
-	if err != nil {
-		return
-	}
-
-	if dataCount == 0 && oobCount == 0 {
-		err = io.EOF
-		return
-	}
-
-	if oobCount > 0 {
-		oob, err = parseOOB(oobBuffer[:oobCount])
-	}
-
-	return
+func (c *SCTPConn) SCTPRead(b []byte) (int, *OOBMessage, int, error) {
+	return SCTPRead(c.FD(), b)
 }
 
 func (c *SCTPConn) Close() error {
-	if c != nil {
-		fd := atomic.SwapInt32(&c._fd, -1)
-		if fd > 0 {
-			info := &SndRcvInfo{
-				Flags: SCTP_EOF,
-			}
-			c.SCTPWrite(nil, info)
-			syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
-			return syscall.Close(int(fd))
-		}
-	}
-	return syscall.EBADF
+	return SCTPClose(c.FD())
 }

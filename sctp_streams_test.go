@@ -51,7 +51,7 @@ func TestStreamsOneToOne(t *testing.T) {
 			}
 			defer sconn.Close()
 
-			sconn.SubscribeEvents(SCTP_EVENT_DATA_IO | SCTP_EVENT_ASSOCIATION)
+			sconn.SetEvents(SCTP_EVENT_DATA_IO | SCTP_EVENT_ASSOCIATION)
 
 			go func() {
 				totalrcvd := 0
@@ -104,15 +104,16 @@ func TestStreamsOneToOne(t *testing.T) {
 	for ; i < STREAM_TEST_CLIENTS; i++ {
 		go func(test int) {
 			defer func() { wait <- struct{}{} }()
-			conn, err := NewSCTPConnection(nil, addr,
+			conn, err := NewSCTPConnection(addr.AddressFamily,
 				InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS},
 				OneToOne, false)
 			if err != nil {
 				t.Errorf("failed to dial address %s, test #%d: %v", addr.String(), test, err)
 				return
 			}
+			conn.Connect(addr)
 			defer conn.Close()
-			conn.SubscribeEvents(SCTP_EVENT_DATA_IO)
+			conn.SetEvents(SCTP_EVENT_DATA_IO)
 			for ppid := uint16(0); ppid < STREAM_TEST_STREAMS; ppid++ {
 				info := &SndRcvInfo{
 					Stream: uint16(ppid),
@@ -183,7 +184,7 @@ func TestStreamsOneToMany(t *testing.T) {
 	}
 	addr = ln.LocalAddr().(*SCTPAddr)
 
-	ln.Socket.SubscribeEvents(SCTP_EVENT_DATA_IO)
+	ln.SetEvents(SCTP_EVENT_DATA_IO)
 
 	t.Log("Spinning up server goroutine")
 	go func() {
@@ -229,15 +230,16 @@ func TestStreamsOneToMany(t *testing.T) {
 		go func(test int) {
 			defer func() { wait <- struct{}{} }()
 			t.Log("Creating client connection")
-			conn, err := NewSCTPConnection(nil, addr,
+			conn, err := NewSCTPConnection(addr.AddressFamily,
 				InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS},
 				OneToOne, false)
 			if err != nil {
 				t.Errorf("failed to dial address %s, test #%d: %v", addr.String(), test, err)
 				return
 			}
+			conn.Connect(addr)
 			defer conn.Close()
-			conn.SubscribeEvents(SCTP_EVENT_DATA_IO)
+			conn.SetEvents(SCTP_EVENT_DATA_IO)
 			for ppid := uint16(0); ppid < STREAM_TEST_STREAMS; ppid++ {
 				info := &SndRcvInfo{
 					Stream: uint16(ppid),

@@ -90,6 +90,12 @@ func TestSCTPConcurrentAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	raddr, err := ln.SCTPLocalAddr(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	const N = 10
 	var wg sync.WaitGroup
 	wg.Add(N)
@@ -108,7 +114,7 @@ func TestSCTPConcurrentAccept(t *testing.T) {
 	attempts := 10 * N
 	fails := 0
 	for i := 0; i < attempts; i++ {
-		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne, false)
+		c, err := NewSCTPConnection(raddr.AddressFamily, InitMsg{}, OneToOne, false)
 		if err != nil {
 			fails++
 		} else {
@@ -130,6 +136,12 @@ func TestSCTPCloseRecv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	raddr, err := ln.SCTPLocalAddr(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var conn net.Conn
 	var wg sync.WaitGroup
 	connReady := make(chan struct{}, 1)
@@ -150,8 +162,12 @@ func TestSCTPCloseRecv(t *testing.T) {
 		}
 	}()
 
-	_, err = NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne, false)
+	c, err := NewSCTPConnection(raddr.AddressFamily, InitMsg{}, OneToOne, false)
 	if err != nil {
+		t.Fatalf("failed to dial: %s", err)
+	}
+
+	if err := c.Connect(raddr); err != nil {
 		t.Fatalf("failed to dial: %s", err)
 	}
 
@@ -171,7 +187,12 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ln.Socket.SubscribeEvents(SCTP_EVENT_DATA_IO | SCTP_EVENT_ASSOCIATION)
+	raddr, err := ln.SCTPLocalAddr(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ln.SetEvents(SCTP_EVENT_DATA_IO | SCTP_EVENT_ASSOCIATION)
 
 	const N = 10
 	for i := 0; i < N; i++ {
@@ -184,7 +205,7 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 				}
 
 				if flags&MSG_NOTIFICATION > 0 {
-					notif, _ := parseNotification(buf[:n])
+					notif, _ := SCTPParseNotification(buf[:n])
 					switch notif.Type() {
 					case SCTP_ASSOC_CHANGE:
 						assocChange := notif.GetAssociationChange()
@@ -199,11 +220,12 @@ func TestSCTPConcurrentOneToMany(t *testing.T) {
 	attempts := 10 * N
 	fails := 0
 	for i := 0; i < attempts; i++ {
-		c, err := NewSCTPConnection(nil, ln.LocalAddr().(*SCTPAddr), InitMsg{}, OneToOne, false)
+		c, err := NewSCTPConnection(raddr.AddressFamily, InitMsg{}, OneToOne, false)
 		if err != nil {
 			fails++
-		} else {
-			c.Close()
+		}
+		if err := c.Connect(raddr); err != nil {
+			fails++
 		}
 	}
 	ln.Close()
@@ -228,7 +250,7 @@ func TestOneToManyPeelOff(t *testing.T) {
 
 	laddr, _ := ln.LocalAddr().(*SCTPAddr)
 
-	ln.Socket.SubscribeEvents(SCTP_EVENT_ASSOCIATION)
+	ln.SetEvents(SCTP_EVENT_ASSOCIATION)
 
 	go func() {
 		test := 999
@@ -246,19 +268,19 @@ func TestOneToManyPeelOff(t *testing.T) {
 
 			if flags&MSG_NOTIFICATION > 0 {
 				t.Logf("[%d]Got a notification. Bytes read: %v\n", test, n)
-				notif, _ := parseNotification(buf[:n])
+				notif, _ := SCTPParseNotification(buf[:n])
 				switch notif.Type() {
 				case SCTP_ASSOC_CHANGE:
 					t.Logf("[%d]Got an association change notification\n", test)
 					assocChange := notif.GetAssociationChange()
 					if assocChange.State == SCTP_COMM_UP {
 						t.Logf("[%d]SCTP_COMM_UP. Creating socket for association: %v\n", test, assocChange.AssocID)
-						newSocket, err := ln.Socket.PeelOff(int(assocChange.AssocID))
+						newSocket, err := ln.PeelOff(assocChange.AssocID)
 						if err != nil {
 							t.Fatalf("Failed to peel off socket: %v", err)
 						}
 						t.Logf("[%d]Peeled off socket: %#+v\n", test, newSocket)
-						if err := newSocket.SubscribeEvents(SCTP_EVENT_DATA_IO); err != nil {
+						if err := newSocket.SetEvents(SCTP_EVENT_DATA_IO); err != nil {
 							t.Logf("[%d]Failed to subscribe to data io for peeled off socket: %v -> %#+v\n", test, err, newSocket)
 						}
 						count++
@@ -293,11 +315,15 @@ func TestOneToManyPeelOff(t *testing.T) {
 		go func(client int, l *SCTPAddr) {
 			defer wg.Done()
 			t.Logf("[%d]Creating new client connection\n", client)
-			c, err := NewSCTPConnection(nil, l, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne, false)
+			c, err := NewSCTPConnection(l.AddressFamily, InitMsg{NumOstreams: STREAM_TEST_STREAMS, MaxInstreams: STREAM_TEST_STREAMS}, OneToOne, false)
 			if err != nil {
 				t.Fatalf("[%d]Failed to connect to SCTP server: %v", client, err)
 			}
-			c.SubscribeEvents(SCTP_EVENT_DATA_IO)
+			if err := c.Connect(l); err != nil {
+				t.Fatalf("[%d]Failed to connect to SCTP server: %v", client, err)
+			}
+
+			c.SetEvents(SCTP_EVENT_DATA_IO)
 			for q := range []int{0, 1} {
 				rstring := randomString(10)
 				rstream := uint16(r.Intn(STREAM_TEST_STREAMS))
@@ -360,7 +386,7 @@ func socketReaderMirror(sock *SCTPConn, t *testing.T, goroutine int) {
 
 		if flags&MSG_NOTIFICATION > 0 {
 			t.Logf("[%d]Notification received. Byte count: %v, OOB: %#+v, Flags: %v\n", goroutine, n, oob, flags)
-			if notif, err := parseNotification(buf[:n]); err == nil {
+			if notif, err := SCTPParseNotification(buf[:n]); err == nil {
 				t.Logf("[%d]Notification type: %v\n", goroutine, notif.Type().String())
 			}
 		}
