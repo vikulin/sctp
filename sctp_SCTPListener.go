@@ -77,3 +77,7 @@ func (ln *SCTPListener) SCTPWrite(b []byte, info *SndRcvInfo) (int, error) {
 
 	return ln.SCTPConn.SCTPWrite(b, info)
 }
+
+func (ln *SCTPListener) Addr() net.Addr {
+	return ln.SCTPConn.LocalAddr()
+}
