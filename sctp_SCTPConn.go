@@ -152,15 +152,15 @@ func (c *SCTPConn) PeelOff(id int32) (*SCTPConn, error) {
 }
 
 func (c *SCTPConn) SetDeadline(t time.Time) error {
-	return syscall.EOPNOTSUPP
+	return nil
 }
 
 func (c *SCTPConn) SetReadDeadline(t time.Time) error {
-	return syscall.EOPNOTSUPP
+	return nil
 }
 
 func (c *SCTPConn) SetWriteDeadline(t time.Time) error {
-	return syscall.EOPNOTSUPP
+	return nil
 }
 
 func (c *SCTPConn) SCTPWrite(b []byte, info *SndRcvInfo) (int, error) {
