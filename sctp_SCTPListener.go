@@ -3,7 +3,6 @@ package sctp
 import (
 	"fmt"
 	"net"
-	"sync"
 
 	syscall "golang.org/x/sys/unix"
 )
