@@ -99,6 +99,7 @@ func SCTPBind(fd int, addr *SCTPAddr, flags int) error {
 	}
 
 	buf := addr.ToRawSockAddrBuf()
+	syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 	_, _, err := setsockopt(fd, option, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	return err
 }
