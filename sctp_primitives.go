@@ -108,39 +108,9 @@ func SCTPListen(fd int) error {
 	return syscall.Listen(fd, syscall.SOMAXCONN)
 }
 
-
-func FD_SET(p *syscall.FdSet, i int) {
-	p.Bits[i/64] |= 1 << (uint(i) % 64)
-}
-
-func FD_ISSET(p *syscall.FdSet, i int) bool {
-	return (p.Bits[i/64] & (1 << (uint(i) % 64))) != 0
-}
-
-func SCTPAccept(lnfd int) (int, error) {
-	ln.m.Lock()
-	defer ln.m.Unlock()
-
-	fds := &syscall.FdSet{}
-	FD_SET(fds, lnfd)
-
-	for {
-		select {
-		case <-ln.done:
-			return nil, ln.Close()
-		default:
-			tv := syscall.Timeval{5, 0}
-			syscall.Select(lnfd+1, fds, nil, nil, &tv)
-			fd, _, err := syscall.Accept4(lnfd, 0)
-			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
-				continue
-			} else if err == nil {
-				return NewSCTPConn(fd, nil), nil
-			} else {
-				return nil, err
-			}
-		}
-	}
+func SCTPAccept(fd int) (int, error) {
+	fd, _, err := syscall.Accept4(fd, 0)
+	return fd, err
 }
 
 func SCTPWrite(fd int, b []byte, info *SndRcvInfo) (int, error) {

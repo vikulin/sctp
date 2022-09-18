@@ -3,16 +3,11 @@ package sctp
 import (
 	"fmt"
 	"net"
-	"sync"
-
-	syscall "golang.org/x/sys/unix"
 )
 
 type SCTPListener struct {
 	SCTPConn
 	socketMode SCTPSocketMode
-	m    sync.Mutex
-	done chan struct{}
 }
 
 func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPListener, error) {
@@ -24,16 +19,6 @@ func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonbloc
 	if err != nil {
 		return nil, err
 	}
-
-	_, _, errno := syscall.Syscall(syscall.SYS_FCNTL,
-		uintptr(conn.fd),
-		syscall.F_SETFL,
-		syscall.O_NONBLOCK)
-
-	if errno != 0 {
-		return nil, error(errno)
-	}
-
 	ln := &SCTPListener{SCTPConn: *conn, socketMode: mode}
 	ln.socketMode = mode
 
