@@ -5,7 +5,7 @@ package sctp
 	#include<stdint.h>
 	#include<linux/sctp.h>
 */
-import "C"
+//import "C"
 import (
 	syscall "golang.org/x/sys/unix"
 	"unsafe"
