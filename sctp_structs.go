@@ -139,7 +139,7 @@ type AssociationChange struct {
 type PeerAddrChange struct {
 	Type    SCTPNotificationType
 	Length  uint32
-	Addr    C.struct_sockaddr_storage
+	Addr    [128]byte//C.struct_sockaddr_storage
 	State   PeerChangeState
 	Error   uint32
 	AssocID int32
