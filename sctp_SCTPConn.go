@@ -12,7 +12,7 @@ type SCTPConn struct {
 	fd int32
 }
 
-func NewSCTPConnection(af SCTPAddressFamily, options InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPConn, error) {
+func NewSCTPConnection(laddr *SCTPAddr, af SCTPAddressFamily, options InitMsg, mode SCTPSocketMode, nonblocking bool) (*SCTPConn, error) {
 
 	fd, err := SCTPSocket(af.ToSyscall(), mode)
 	if err != nil {
@@ -34,7 +34,11 @@ func NewSCTPConnection(af SCTPAddressFamily, options InitMsg, mode SCTPSocketMod
 		return nil, err
 	}
 
-	if err := syscall.SetNonblock(fd, nonblocking); err != nil {
+	if err = syscall.SetNonblock(fd, nonblocking); err != nil {
+		return nil, err
+	}
+
+	if err = SCTPBind(fd, laddr, SCTP_BINDX_ADD_ADDR); err != nil {
 		return nil, err
 	}
 
