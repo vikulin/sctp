@@ -23,10 +23,6 @@ func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonbloc
 	ln := &SCTPListener{SCTPConn: *conn, socketMode: mode}
 	ln.socketMode = mode
 
-	if err := ln.Bind(laddr); err != nil {
-		return nil, err
-	}
-
 	if err := ln.Listen(); err != nil {
 		return nil, err
 	}
