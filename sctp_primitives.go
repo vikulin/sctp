@@ -132,7 +132,7 @@ func SCTPWrite(fd int, b []byte, info *SndRcvInfo) (int, error) {
 
 func SCTPRead(fd int, b []byte) (dataCount int, oob *OOBMessage, flags int, err error) {
 
-	oobBuffer := make([]byte, 4096)
+	oobBuffer := make([]byte, 254)
 	oobCount := 0
 
 	dataCount, oobCount, flags, _, err = syscall.Recvmsg(fd, b, oobBuffer, 0)
