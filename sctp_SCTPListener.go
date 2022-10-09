@@ -15,7 +15,7 @@ func NewSCTPListener(laddr *SCTPAddr, init InitMsg, mode SCTPSocketMode, nonbloc
 		return nil, fmt.Errorf("Local SCTPAddr is required")
 	}
 
-	conn, err := NewSCTPConnection(laddr.AddressFamily, init, mode, nonblocking)
+	conn, err := NewSCTPConnection(laddr, laddr.AddressFamily, init, mode, nonblocking)
 	if err != nil {
 		return nil, err
 	}
