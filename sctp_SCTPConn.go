@@ -178,3 +178,19 @@ func (c *SCTPConn) SCTPRead(b []byte) (int, *OOBMessage, int, error) {
 func (c *SCTPConn) Close() error {
 	return SCTPClose(c.FD())
 }
+
+func (c *SCTPConn) SetWriteBuffer(bytes int) error {
+	return syscall.SetsockoptInt(c.FD(), syscall.SOL_SOCKET, syscall.SO_SNDBUF, bytes)
+}
+
+func (c *SCTPConn) GetWriteBuffer() (int, error) {
+	return syscall.GetsockoptInt(c.FD(), syscall.SOL_SOCKET, syscall.SO_SNDBUF)
+}
+
+func (c *SCTPConn) SetReadBuffer(bytes int) error {
+	return syscall.SetsockoptInt(c.FD(), syscall.SOL_SOCKET, syscall.SO_RCVBUF, bytes)
+}
+
+func (c *SCTPConn) GetReadBuffer() (int, error) {
+	return syscall.GetsockoptInt(c.FD(), syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+}
